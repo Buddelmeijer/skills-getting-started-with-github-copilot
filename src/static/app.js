@@ -7,11 +7,12 @@ document.addEventListener("DOMContentLoaded", () => {
   // Function to fetch activities from API
   async function fetchActivities() {
     try {
-      const response = await fetch("/activities");
+      const response = await fetch("/activities", { cache: "no-store" });
       const activities = await response.json();
 
       // Clear loading message
       activitiesList.innerHTML = "";
+      activitySelect.length = 1;
 
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
@@ -26,6 +27,41 @@ document.addEventListener("DOMContentLoaded", () => {
           <p><strong>Schedule:</strong> ${details.schedule}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
         `;
+
+        const participantsHeading = document.createElement("p");
+        participantsHeading.innerHTML = "<strong>Participants:</strong>";
+        activityCard.appendChild(participantsHeading);
+
+        if (details.participants.length === 0) {
+          const emptyMessage = document.createElement("p");
+          emptyMessage.textContent = "No participants yet.";
+          activityCard.appendChild(emptyMessage);
+        } else {
+          const participantList = document.createElement("ul");
+          participantList.className = "participant-list";
+
+          details.participants.forEach((email) => {
+            const participant = document.createElement("li");
+            participant.className = "participant";
+
+            const participantEmail = document.createElement("span");
+            participantEmail.textContent = email;
+
+            const unregisterButton = document.createElement("button");
+            unregisterButton.type = "button";
+            unregisterButton.className = "delete-participant-button";
+            unregisterButton.textContent = "🗑";
+            unregisterButton.dataset.activity = name;
+            unregisterButton.dataset.email = email;
+            unregisterButton.setAttribute("aria-label", `Unregister ${email} from ${name}`);
+            unregisterButton.title = `Unregister ${email}`;
+
+            participant.append(participantEmail, unregisterButton);
+            participantList.appendChild(participant);
+          });
+
+          activityCard.appendChild(participantList);
+        }
 
         activitiesList.appendChild(activityCard);
 
@@ -62,6 +98,7 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        await fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
@@ -78,6 +115,46 @@ document.addEventListener("DOMContentLoaded", () => {
       messageDiv.className = "error";
       messageDiv.classList.remove("hidden");
       console.error("Error signing up:", error);
+    }
+  });
+
+  activitiesList.addEventListener("click", async (event) => {
+    if (!(event.target instanceof Element)) {
+      return;
+    }
+
+    const button = event.target.closest(".delete-participant-button");
+    if (!button) {
+      return;
+    }
+
+    const { activity, email } = button.dataset;
+    button.disabled = true;
+
+    try {
+      const response = await fetch(
+        `/activities/${encodeURIComponent(activity)}/signup?email=${encodeURIComponent(email)}`,
+        { method: "DELETE" }
+      );
+      const result = await response.json();
+
+      if (response.ok) {
+        messageDiv.textContent = result.message;
+        messageDiv.className = "success";
+        await fetchActivities();
+      } else {
+        messageDiv.textContent = result.detail || "An error occurred";
+        messageDiv.className = "error";
+      }
+
+      messageDiv.classList.remove("hidden");
+    } catch (error) {
+      messageDiv.textContent = "Failed to unregister. Please try again.";
+      messageDiv.className = "error";
+      messageDiv.classList.remove("hidden");
+      console.error("Error unregistering participant:", error);
+    } finally {
+      button.disabled = false;
     }
   });
 
